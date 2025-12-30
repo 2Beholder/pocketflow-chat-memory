@@ -1,33 +1,35 @@
 import os
-import numpy as np
-from openai import OpenAI
+import requests
 
-def get_embedding(text):
-    client = OpenAI(base_url='https://api.siliconflow.cn/v1',api_key='sk-wlkdqwxrxluafkzgjnzzqnvnqvvpknttbbdyrberuodimhzv')
-    
-    response = client.embeddings.create(
-        model="Qwen/Qwen3-Embedding-4B",
-        input=text
-    )
-    
-    # Extract the embedding vector from the response
-    embedding = response.data[0].embedding
-    
-    # Convert to numpy array for consistency with other embedding functions
-    return np.array(embedding, dtype=np.float32)
+# Default base URL (keeps previous behavior)
+DEFAULT_SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 
 
-if __name__ == "__main__":
-    # Test the embedding function
-    text1 = "The quick brown fox jumps over the lazy dog."
-    text2 = "Python is a popular programming language for data science."
-    
-    emb1 = get_embedding(text1)
-    emb2 = get_embedding(text2)
-    
-    print(f"Embedding 1 shape: {emb1.shape}")
-    print(f"Embedding 2 shape: {emb2.shape}")
-    
-    # Calculate similarity (dot product)
-    similarity = np.dot(emb1, emb2)
-    print(f"Similarity between texts: {similarity:.4f}") 
+def get_embedding(text: str, model: str = "BAAI/bge-m3"):
+    """Get embedding from SiliconFlow.
+
+    API key is read from environment variable SILICONFLOW_API_KEY.
+    Base URL can be overridden with SILICONFLOW_BASE_URL (defaults to
+    https://api.siliconflow.cn/v1).
+    """
+
+    url = f"{os.getenv('SILICONFLOW_BASE_URL', DEFAULT_SILICONFLOW_BASE_URL)}/embeddings"
+    api_key = os.getenv("SILICONFLOW_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "Missing SiliconFlow API key. Please set environment variable SILICONFLOW_API_KEY."
+        )
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {"input": text, "model": model}
+    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    response.raise_for_status()
+    data = response.json()
+
+    # SiliconFlow returns: {"data": [{"embedding": [...] , ...}], ...}
+    return data["data"][0]["embedding"]
